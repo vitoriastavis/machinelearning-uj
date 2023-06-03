@@ -1,16 +1,16 @@
 ---
+output: github_document
 jupyter:
   jupytext:
     text_representation:
       extension: .Rmd
       format_name: rmarkdown
       format_version: '1.2'
-      jupytext_version: 1.13.8
+      jupytext_version: 1.14.5
   kernelspec:
     display_name: Python 3 (ipykernel)
     language: python
     name: python3
-output: github_document
 ---
 
 # Counterfeit detection
@@ -24,6 +24,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.stats as st
 import scrapbook as sb
+import sklearn
 ```
 
 ```{python}
@@ -34,10 +35,10 @@ plt.rcParams['figure.figsize']=(8,8)
 Please insert you  firstname  and name below
 
 ```{python}
-sb.glue("Who", ["FirstName", "Name"])
+sb.glue("Who", ["Vitoria", "Stavis"])
 ```
 
-```{python tags=c()}
+```{python}
 from  sklearn.model_selection import train_test_split
 seed = 31287
 ```
@@ -46,7 +47,7 @@ seed = 31287
 data = pd.read_csv('data/banknotes_data.csv')
 ```
 
-```{python tags=c()}
+```{python}
 data.head()
 ```
 
@@ -58,15 +59,15 @@ data.describe()
 data.info()
 ```
 
-```{python tags=c()}
+```{python}
 data_train, data_test = train_test_split(data, test_size=0.2, shuffle=True, stratify=data.loc[:,'counterfeit'], random_state=seed)
 ```
 
-```{python tags=c()}
+```{python}
 lbls_train = data_train['counterfeit']
 ```
 
-```{python tags=c()}
+```{python}
 fig, ax = plt.subplots(1,4, figsize=(22,5))
 for i in range(4):
     ax[i].hist(data_train[lbls_train==0].iloc[:,i], bins=32, histtype='step', color='blue')
@@ -75,19 +76,17 @@ for i in range(4):
     ax[i].hist(data_train[lbls_train==1].iloc[:,i], bins=32, histtype='bar', color='orange', alpha =0.25)
 ```
 
-<!-- #region tags=[] -->
 You will have to install a popular plotting library `seaborn`
-<!-- #endregion -->
 
-```{python tags=c()}
+```{python}
 import seaborn
 ```
 
-```{python tags=c()}
+```{python}
 seaborn.pairplot(data_train.iloc[:,0:5], hue='counterfeit');
 ```
 
-```{python tags=c()}
+```{python}
 len(data_train)
 ```
 
@@ -100,7 +99,105 @@ Implement Gaussian  Bayes classifier using only one feature. Which feature will 
 __Hint__ For calculating metrics and plotting ROC curves you may use functions from scikit-learn: `roc_curve`, `roc_auc_score` and `confusion matrix`. For estimating normal distribution parameters  use `norm.fit` `from scipy.stats`. Use `norm.pdf` for normal probability density function.
 
 ```{python}
-from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix
+from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, accuracy_score
+```
+
+```{python}
+X_train = data_train['a0']
+X_test = data_test['a0']
+y_train = data_train['counterfeit'] 
+y_test = data_test['counterfeit']
+
+print(len(X_train), len(X_test), len(y_train), len(y_test))
+```
+
+```{python}
+
+
+# make pdf function with condicional probablity for Gaussian NB with 1 feature
+def make_pdf(data, labels):
+
+    # data and labels
+    positives = data[labels == 1]
+    negatives = data[labels == 0]
+
+    mean_p, std_p = norm.fit(positives)
+    mean_n, std_n = norm.fit(negatives)
+
+    pdf_p = norm(mean_p, std_p).pdf
+    pdf_n = norm(mean_n, std_n).pdf
+
+    p_p = labels.mean()
+    p_n = 1-p_p
+    
+    def pdf(x):
+        return pdf_p(x)*p_p/(pdf_p(x)*p_p+pdf_n(x)*p_n)
+    
+    return pdf
+```
+
+```{python}
+# pdf counterfeit conditional a0
+pdf_1feat = make_pdf(X_train, y_train)
+```
+
+```{python}
+fig, ax = plt.subplots()
+hs = np.linspace(min(X_train)-1, max(X_train)+1,len(X_train))
+ax.plot(hs, pdf_1feat(hs));
+ax.set_xlabel("a0");
+ax.set_ylabel("P(C|a0)");
+```
+
+```{python}
+cm_train = confusion_matrix(y_train,pdf_1feat(X_train)>0.5, normalize='true')
+cm_train
+```
+
+```{python}
+from scipy.optimize import fsolve
+threshold = fsolve(lambda h: pdf_1feat(h)-0.5, 0.5)[0]
+print(threshold)
+```
+
+```{python}
+accuracy_score(y_test,X_test<=threshold)
+```
+
+```{python}
+sklearn.metrics.ConfusionMatrixDisplay.from_predictions(y_test,X_test<=threshold, normalize='true');
+```
+
+```{python}
+cm_test = confusion_matrix(y_test,X_test<=threshold, normalize='true')
+(tnr, fpr),(fnr, tpr) = cm_test
+
+```
+
+```{python}
+print(tnr, fpr, fnr, tpr)
+```
+
+```{python}
+fprs, tprs, thds = roc_curve(y_test, pdf_1feat(X_test))
+auc = roc_auc_score(y_test, pdf_1feat(X_test))
+```
+
+```{python}
+
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=[8,8])
+ax.set_aspect(1)
+ax.set_xlabel('FPR');
+ax.set_ylabel('TPR');
+ax.set_title('ROC')
+ax.plot([0,1,1,0,0],[0,0,1,1,0], '-', color='grey', linewidth=1)
+roc = ax.plot(fprs,tprs, color='blue', linewidth=1);
+
+ax.scatter([fpr],[tpr],s = 30, edgecolor='blue', zorder=5, facecolor='blue');
+ax.text(0.7, 0.8, "AUC = {:4.2f}".format(auc), fontsize=12);
 ```
 
 ## Problem 2
@@ -108,8 +205,182 @@ from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix
 
 Same as Problem 1 but now implement Gaussian Naive Bayes using two features. Compare ROC curves on the test set. What is teh improvement of AUC score on the test set?
 
+```{python}
+feats[:len(feats)-1]
+```
+
+```{python}
+feats = data.columns.tolist()
+feats = feats[:len(feats)-1]
+
+for i in range(len(feats)):
+    for j in range(i+1, len(feats)):
+        feature1 = feats[i]
+        feature2 = feats[j]
+        print(data[[feature1, feature2]].corr())
+        print()
+      
+            
+```
+
+```{python}
+X_train = data_train[['a0', 'a1']]
+X_test = data_test[['a0', 'a1']]
+
+print(len(X_train), len(X_test), len(y_train), len(y_test))
+```
+
+```{python}
+plt.scatter(X_train['a0'], X_train['a1'], alpha=0.2);
+plt.xlabel('a0')
+plt.ylabel('a1');
+plt.legend();
+```
+
+```{python}
+# make pdf function with condicional probablity for Gaussian NB with 2 features
+def make_pdf_2feat(labels, a0, a1 ):
+    
+    positives = labels==1
+    negatives = labels==0
+    
+    pdf_a0_p = st.norm(*st.norm.fit(a0[positives])).pdf
+    pdf_a0_n = st.norm(*st.norm.fit(a0[negatives])).pdf 
+    
+    pdf_a1_p = st.norm(*st.norm.fit(a1[positives])).pdf
+    pdf_a1_n = st.norm(*st.norm.fit(a1[negatives])).pdf                  
+                      
+    
+    p_p = labels.mean()
+    p_n = 1-p_p
+    
+    def pdf(a0_input, a1_input):
+        p_prod = pdf_a0_p(a0_input)*pdf_a1_p(a1_input)*p_p
+        n_prod = pdf_a0_n(a0_input)*pdf_a1_n(a1_input)*p_n
+        
+        
+        return p_prod/(p_prod +n_prod)
+        
+    return pdf
+```
+
+```{python}
+pdf_2feat = make_pdf_2feat(y_test, X_test['a0'], X_test['a1'])
+```
+
+```{python}
+(_, fpr_2feat),(_, tpr_2feat) = confusion_matrix(y_test, pdf_2feat(X_test['a0'], X_test['a1'])>0.5, normalize='true' )
+```
+
+```{python}
+print(fpr_2feat, tpr_2feat)
+```
+
+```{python}
+fprs_2feat, tprs_2feat, thds_2feat = roc_curve(y_test, pdf_2feat(X_test['a0'], X_test['a1']))
+auc_2feat = roc_auc_score(y_test, pdf_2feat(X_test['a0'], X_test['a1']))
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=[8,8])
+ax.set_aspect(1)
+ax.set_xlabel('FPR');
+ax.set_ylabel('TPR');
+ax.set_title('ROC')
+ax.plot(fprs, tprs, label='a0')
+ax.scatter([fpr],[tpr], color='blue', zorder = 5)
+ax.plot(fprs_2feat, tprs_2feat,  label = "a0 and a1")
+ax.scatter([fpr_2feat],[tpr_2feat], color='orange', zorder = 5)
+ax.text(0.4,0.8,"AUC = {:.3f}\nAUC 2feat = {:.3f}".format(auc, auc_2feat))
+ax.legend();
+```
+
+```{python}
+auc_2feat/auc -1
+# it slightly increased
+```
 
 ## Problem 3
 
 
 Same as Problem 2 but now implement Gaussian Naive Bayes using all features.
+
+```{python}
+X_train = data_train
+X_test = data_test
+```
+
+```{python}
+# make pdf function with condicional probablity for Gaussian NB with 2 features
+def make_pdf_all(labels, a0, a1, a2, a3):
+    
+    positives = labels==1
+    negatives = labels==0
+    
+    pdf_a0_p = st.norm(*st.norm.fit(a0[positives])).pdf
+    pdf_a0_n = st.norm(*st.norm.fit(a0[negatives])).pdf 
+    
+    pdf_a1_p = st.norm(*st.norm.fit(a1[positives])).pdf
+    pdf_a1_n = st.norm(*st.norm.fit(a1[negatives])).pdf      
+    
+    pdf_a2_p = st.norm(*st.norm.fit(a2[positives])).pdf
+    pdf_a2_n = st.norm(*st.norm.fit(a2[negatives])).pdf 
+    
+    pdf_a3_p = st.norm(*st.norm.fit(a3[positives])).pdf
+    pdf_a3_n = st.norm(*st.norm.fit(a3[negatives])).pdf                                
+    
+    p_p = labels.mean()
+    p_n = 1-p_p
+    
+    def pdf(a0_input, a1_input, a2_input, a3_input):
+        p_prod = pdf_a0_p(a0_input)*pdf_a1_p(a1_input)*pdf_a2_p(a2_input)*pdf_a3_p(a3_input)*p_p
+        n_prod = pdf_a0_n(a0_input)*pdf_a1_n(a1_input)*pdf_a2_n(a2_input)*pdf_a3_n(a3_input)*p_n
+        
+        
+        return p_prod/(p_prod +n_prod)
+        
+    return pdf
+```
+
+```{python}
+pdf_all = make_pdf_all(y_train, X_train['a0'], X_train['a1'], X_train['a2'], X_train['a3'])
+```
+
+```{python}
+pdf_test = pdf_all(X_test['a0'], X_test['a1'], X_test['a2'], X_test['a3'])
+```
+
+```{python}
+(_, fpr_all),(_, tpr_all) = confusion_matrix(y_test, pdf_test>0.5, normalize='true' )
+```
+
+```{python}
+fprs_all, tprs_all, thds_all = roc_curve(y_test, pdf_test)
+auc_all = roc_auc_score(y_test, pdf_test)
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=[8,8])
+ax.set_aspect(1)
+ax.set_xlabel('FPR');
+ax.set_ylabel('TPR');
+ax.set_title('ROC')
+
+ax.plot(fprs, tprs, label='a0')
+ax.scatter([fpr],[tpr], color='blue', zorder = 5)
+
+ax.plot(fprs_2feat, tprs_2feat,  label = "a0 and a1")
+ax.scatter([fpr_2feat],[tpr_2feat], color='orange', zorder = 5)
+
+ax.plot(fprs_all, tprs_all,  label = "all features")
+ax.scatter([fpr_all],[tpr_all], color='green', zorder = 5)
+
+ax.text(0.4,0.8,"AUC = {:.3f}\nAUC 2feat = {:.3f}\nAUC all feat = {:.3f}".format(auc, auc_2feat, auc_all))
+ax.legend();
+```
+
+using all features didn't result in the best AUC. possibly because there is dependency between a1 and a2 (corr = -0.79)
+
+```{python}
+
+```

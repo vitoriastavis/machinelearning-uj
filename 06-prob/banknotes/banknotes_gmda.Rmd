@@ -5,7 +5,7 @@ jupyter:
       extension: .Rmd
       format_name: rmarkdown
       format_version: '1.2'
-      jupytext_version: 1.13.8
+      jupytext_version: 1.14.5
   kernelspec:
     display_name: Python 3 (ipykernel)
     language: python
@@ -46,16 +46,86 @@ data.head()
 Perform the Quadratic Discriminant Analysis on this set. Calculate the confusion matrix, AUC score and plot the ROC curve. Please use `scrapbook` to store your results. 
 
 ```{python}
+from sklearn.model_selection import train_test_split
+seed = 5555
+train_data, test_data  = train_test_split(data,test_size=0.3, random_state=seed)
+```
+
+```{python}
+x_train = train_data[['a1', 'a2', 'a3']]
+x_test = test_data[['a1', 'a2', 'a3']]
+y_train = train_data['counterfeit']
+y_test = test_data['counterfeit']
+```
+
+```{python}
+clf.fit(x_train, y_train)
+
+y_scores_qda = clf.predict_proba(x_test)
+y_scores_qda = y_scores_qda[:,1]
+y_pred_qda = (y_scores_qda > 0.5).astype(int)
+```
+
+```{python}
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import precision_score
+from sklearn.metrics import f1_score
+from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_auc_score
+
+cm_qda = confusion_matrix(y_test, y_pred_qda, normalize='true')
+
+tn, fp, fn, tp = cm_qda.ravel()
+
+tnr = tn/(tn+fp)
+fpr = fp/(fp+tn)
+fnr = fn/(fn+tp)
+tpr = tp/(tp+fn)
+
+precision = precision_score(y_test, y_pred_qda, average='weighted')
+f1 = f1_score(y_test, y_pred_qda, average='weighted')
+fprs, tprs, thds = roc_curve(y_test, y_scores_qda)
+auc = roc_auc_score(y_test, y_scores_qda, multi_class = 'ovr')
+```
+
+```{python}
+print("TNR:", tnr)
+print("FPR:", fpr)
+print("FNR:", fnr)
+print("TPR:", tpr)
+print("precision:", precision)
+print("f1:", f1)
+print("auc:", auc)
+```
+
+```{python}
 sb.glue('A_scores',['tnr', 'fpr', 'fnr', 'tpr', 'precision', 'f1', 'auc'], display=True)
 ```
 
 also please save the ROC plot
 
 ```{python}
+auc_a = auc
+tprs_a = tprs
+fprs_a = fprs
+tpr_a = tpr
+fpr_a = fpr
+```
+
+```{python}
 fig, ax = plt.subplots()
-#plot ROC
+ax.set_xlabel('FPR');
+ax.set_ylabel('TPR');
+ax.set_title('ROC')
 ax.plot([0,1],[0,1]);
+
+roc = ax.plot(fprs_a,tprs_a, color='blue', linewidth=1);
+
+ax.scatter([fpr_a],[tpr_a],s = 30, edgecolor='blue', zorder=5, facecolor='blue');
+ax.text(0.5, 0.8, "AUC = {:4.2f}".format(auc), fontsize=12, color= 'blue');
+
 sb.glue('A_ROC',fig, "display", display=False);
+
 ```
 
 ### B.
@@ -64,15 +134,130 @@ sb.glue('A_ROC',fig, "display", display=False);
 Perform Gaussian Mixture Discriminant Analysis on this set as described in the `gaussian_mixture_model_EM_algorithm` notebook. Use two components for positives and two components for negatives. Calculate the confusion matrix, AUC score and plot the ROC curve. 
 
 ```{python}
+from sklearn.mixture import GaussianMixture
+```
+
+```{python}
+cf_gm = GaussianMixture(n_components=2, max_iter=100, tol=0.0001) 
+ncf_gm = GaussianMixture(n_components=2, max_iter=100, tol=0.0001) 
+```
+
+```{python}
+cf = x_train[y_train == 1]
+ncf = x_train[y_train == 0]
+```
+
+```{python}
+cf_gm.fit(cf)
+ncf_gm.fit(ncf)
+```
+
+```{python}
+print(cf_gm.weights_)  #pi
+print(cf_gm.means_)    #mu
+print(cf_gm.covariances_) #Sigma (covariance) matrices
+```
+
+```{python}
+def make_pdf(cmp):
+    """
+    Takes a GaussianMixture object and returns corresponding
+    probability distribution function
+    """
+    n_cmp = cmp.n_components
+    dists = [st.multivariate_normal(cmp.means_[i], cmp.covariances_[i]) for i in range(n_cmp)]
+    def pdf(x):
+        p = 0.0
+        for i in range(n_cmp):
+            p+= cmp.weights_[i]*dists[i].pdf(x)
+        return p
+    
+    return pdf
+    
+    
+def make_predict_proba(cmp0, cmp1, pi0=0.5, pi1=.5):
+    """
+    Takes two GaussianMixture object and corresponding priors and returns 
+    pdf for conditional probability P(c=1|x)
+    """
+    pdf0 = make_pdf(cmp0)
+    pdf1 = make_pdf(cmp1)
+    def p(x):
+        p0=pi0*pdf0(x)
+        p1=pi1*pdf1(x)
+        return p1/(p1+p0)    
+        
+    return p
+        
+```
+
+```{python}
+mgd_predict_proba = make_predict_proba(ncf_gm, cf_gm, 0.5, 0.5)
+```
+
+```{python}
+y_scores_gm = mgd_predict_proba(x_test)
+y_pred_gm = (y_scores_gm > 0.5).astype(int)
+```
+
+```{python}
+cm_gm = confusion_matrix(y_test, y_scores_gm>0.5, normalize='true')
+```
+
+```{python}
+tn, fp, fn, tp = cm_gm.ravel()
+
+tnr = tn/(tn+fp)
+fpr = fp/(fp+tn)
+fnr = fn/(fn+tp)
+tpr = tp/(tp+fn)
+
+precision = precision_score(y_test, mgd_proba>0.5, average='weighted')
+f1 = f1_score(y_test, mgd_proba>0.5, average='weighted')
+fprs, tprs, thds = roc_curve(y_test, mgd_proba)
+auc = roc_auc_score(y_test, mgd_proba, multi_class = 'ovr')
+```
+
+```{python}
+print("TNR:", tnr)
+print("FPR:", fpr)
+print("FNR:", fnr)
+print("TPR:", tpr)
+print("precision:", precision)
+print("f1:", f1)
+print("auc:", auc)
+```
+
+```{python}
 sb.glue('B_scores',['tnr', 'fpr', 'fnr', 'tpr', 'precision', 'f1', 'auc'], display=True)
 ```
 
 also please save the ROC plot
 
 ```{python}
+auc_b = auc
+fpr_b = fpr
+tpr_b = tpr
+fprs_b = fprs
+tprs_b = tprs
+```
+
+```{python}
 fig, ax = plt.subplots()
-#plot ROCs (for A and B problems)
+ax.set_xlabel('FPR');
+ax.set_ylabel('TPR');
+ax.set_title('ROC')
 ax.plot([0,1],[0,1]);
+
+ax.plot(fprs_a,tprs_a, color='blue', linewidth=1);
+ax.scatter([fpr_a],[tpr_a],s = 30, edgecolor='blue', zorder=5, facecolor='blue');
+
+ax.plot(fprs_b,tprs_b, color='orange', linewidth=1);
+ax.scatter([fpr_b],[tpr_b],s = 30, edgecolor='orange', zorder=5, facecolor='orange');
+
+ax.text(0.65, 0.5, "AUC QDA = {:4.2f}".format(auc_a), fontsize=12, color='blue');
+ax.text(0.65, 0.45, "AUC GM = {:4.2f}".format(auc_b), fontsize=12, color='orange');
+
 sb.glue('B_ROC',fig, "display", display=False);
 ```
 
@@ -85,11 +270,121 @@ Use k-fold cross validation to find the optimal number of gaussian components fo
 __Hint__ use the `StratifiedKFold` function from scikit-learn library to generate folds. 
 
 ```{python}
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import f1_score
+```
+
+```{python}
+X = data[['a1', 'a2', 'a3']].values
+y = data['counterfeit'].values
+skf = StratifiedKFold(n_splits=6)
+splits = skf.get_n_splits(X, y)
+```
+
+```{python}
+max_comp = 12
+# store the best number of components for each class
+best_n_comp = {}  
+
+for label in np.unique(y):
+    
+    best_f1 = 0.0  
+    best_n = None  
+    
+    for n_comp in range(1, max_comp+1):
+        # f1 scores for each fold
+        f1_scores = []  
+        
+        for train_index, test_index in skf.split(X, y):
+            
+            #print(train_index, test_index)
+            X_tr, X_te = X[train_index], X[test_index]
+            y_tr, y_te = y[train_index], y[test_index]
+            
+            # fit gm
+            gmm = GaussianMixture(n_components = n_comp)
+            gmm.fit(X_tr[y_tr == label]) 
+                       
+            y_pred = gmm.predict(X_te)
+           
+            f1score = f1_score(y_te[y_te == label], y_pred[y_te == label], average='weighted')
+            f1_scores.append(f1score)
+          
+        # average accuracy for this number of comp
+        avg_f1 = np.mean(f1_scores)
+        
+        # check accuracy
+        if avg_f1 > best_f1:
+            best_f1 = avg_f1
+            best_n = n_comp
+            
+        # reach max n of components
+        if n_comp >= max_comp:
+            break  
+    
+    best_n_comp[label] = best_n  # Store the best number of components for the class
+
+print(best_n_comp)
+```
+
+```{python}
+# save results
+n_cpm_neg = best_n_comp[0]  
+n_cpm_pos = best_n_comp[1]
+best_f1_score = best_f1
+```
+
+```{python}
 #  store the results of the best fit 
 sb.glue("C_n_cmp",['n_cmp_pos', 'n_cmp_neg', 'best_f1_score'])
 ```
 
+```{python}
+from sklearn.mixture import GaussianMixture
+
+gmm_ncf = GaussianMixture(n_components = n_cpm_neg)
+gmm_cf = GaussianMixture(n_components = n_cpm_pos)
+
+gmm_ncf.fit(x_train[y_train == 0])
+gmm_cf.fit(x_train[y_train == 1])
+```
+
+```{python}
+y_scores_kf = gmm_cf.predict_proba(x_test)
+y_scores_kf = y_scores_kf[:,1]
+y_pred_kf = (y_scores_kf > 0.5).astype(int)
+```
+
+```{python}
+cm_kf = confusion_matrix(y_test, y_pred_kf, normalize='true')
+```
+
 Store the results for the best estimator
+
+```{python}
+tn, fp, fn, tp = cm_kf.ravel()
+
+tnr = tn/(tn+fp)
+fpr = fp/(fp+tn)
+fnr = fn/(fn+tp)
+tpr = tp/(tp+fn)
+
+precision = precision_score(y_test, y_pred_kf, average='weighted')
+f1 = f1_score(y_test, y_pred_kf, average='weighted')
+fprs, tprs, thds = roc_curve(y_test, y_scores_kf)
+auc = roc_auc_score(y_test, y_scores_kf, multi_class = 'ovr')
+```
+
+```{python}
+print("TNR:", tnr)
+print("FPR:", fpr)
+print("FNR:", fnr)
+print("TPR:", tpr)
+print("precision:", precision)
+print("f1:", f1)
+print("auc:", auc)
+```
 
 ```{python}
 sb.glue('C_scores',['tnr', 'fpr', 'fnr', 'tpr', 'precision', 'f1', 'auc'], display=True)
@@ -98,9 +393,33 @@ sb.glue('C_scores',['tnr', 'fpr', 'fnr', 'tpr', 'precision', 'f1', 'auc'], displ
 also please save the ROC plot
 
 ```{python}
+auc_c = auc
+fpr_c = fpr
+tpr_c = tpr
+fprs_c = fprs
+tprs_c = tprs
+```
+
+```{python}
 fig, ax = plt.subplots()
-#plot ROCs (for A and B  Cproblems)
+ax.set_xlabel('FPR');
+ax.set_ylabel('TPR');
+ax.set_title('ROC')
 ax.plot([0,1],[0,1]);
+
+ax.plot(fprs_a,tprs_a, color='blue', linewidth=1);
+ax.scatter([fpr_a],[tpr_a],s = 30, edgecolor='blue', zorder=5, facecolor='blue');
+
+ax.plot(fprs_b,tprs_b, color='orange', linewidth=1);
+ax.scatter([fpr_b],[tpr_b],s = 30, edgecolor='orange', zorder=5, facecolor='orange');
+
+ax.plot(fprs_c,tprs_c, color='green', linewidth=1);
+ax.scatter([fpr_c],[tpr_c],s = 30, edgecolor='green', zorder=5, facecolor='green');
+
+ax.text(0.65, 0.5, "AUC QDA = {:4.2f}".format(auc_a), fontsize=12, color='blue');
+ax.text(0.65, 0.45, "AUC GM = {:4.2f}".format(auc_b), fontsize=12, color='orange');
+ax.text(0.65, 0.4, "AUC KFolds = {:4.2f}".format(auc_c), fontsize=12, color='green');
+
 sb.glue('C_ROC',fig, "display", display=False);
 ```
 
@@ -109,12 +428,179 @@ sb.glue('C_ROC',fig, "display", display=False);
 
 Assume that 1% of all the customers in your store try to pay with a counterfeit 100PLN bill. If you accept the counterfeit bill you loose 100PLN. If you reject a valid bill,  you may loose the purchase, you estimate this loss as 15PLN on average. For each of the three classifiers find the threshold that minimises your losses and calculates the minimum loss for each classifier. Show the optimal classifiers points on the ROC curves.
 
+
+accept counterfeit = false positive
+reject valid = false negative
+
+```{python}
+# probability of a customer trying to pay with a counterfeit bill
+fp_prob = 0.01  
+# loss when accepting a counterfeit bill
+fp_loss = 100 
+# loss when rejecting a valid bill
+fn_loss = 15 
+
+thresholds = np.linspace(0, 1, num=100)  
+```
+
+### QDA
+
+```{python}
+min_loss_qda = float('inf')  
+optimal_threshold_qda = None
+
+# first for QDA
+for threshold in thresholds:
+    y_pred = (y_scores_qda >= threshold).astype(int)
+
+    # true positives, false positives, true negatives, false negatives
+    cm = confusion_matrix(y_test, y_pred, normalize='true')
+    tn, fp, fn, tp = cm.ravel()
+
+    # expected loss 
+    expected_loss = (fp * fp_prob * fp_loss) + (fn * fn_loss)
+    
+    # update minimum loss and optimal threshold 
+    if expected_loss < min_loss_qda:
+        min_loss_qda = expected_loss
+        optimal_threshold_qda = threshold
+
+print("Optimal Threshold QDA:", optimal_threshold_qda)
+print("Minimum Loss QDA:", min_loss_qda)
+```
+
+```{python}
+y_pred_qda_t = (y_scores_qda >= optimal_threshold_qda).astype(int)
+
+cm_qda_t = confusion_matrix(y_test, y_scores_qda > optimal_threshold_qda, normalize='true')
+tn, fp, fn, tp = cm_qda_t.ravel()
+```
+
+```{python}
+tnr = tn/(tn+fp)
+fpr_qda_t = fp/(fp+tn)
+fnr = fn/(fn+tp)
+tpr_qda_t = tp/(tp+fn)
+
+precision = precision_score(y_test, y_pred_qda_t, average='weighted')
+f1 = f1_score(y_test, y_pred_qda_t, average='weighted')
+fprs_qda_t, tprs_qda_t, thds = roc_curve(y_test, y_scores_qda)
+auc_qda_t = roc_auc_score(y_test, y_scores_qda, multi_class = 'ovr')
+```
+
+```{python}
+min_loss = min_loss_qda
+threshold = optimal_threshold_qda
+```
+
 ```{python}
 sb.glue('D_A_scores',['tnr', 'fpr', 'fnr', 'tpr', 'precision', 'f1', 'auc', 'min_loss', 'threshold'], display=True)
 ```
 
+### GMM
+
+```{python}
+min_loss_gm = float('inf')  
+optimal_threshold_gm = None
+
+# GMM
+for threshold in thresholds:
+    y_pred = (y_scores_gm >= threshold).astype(int)
+
+    # true positives, false positives, true negatives, false negatives
+    cm = confusion_matrix(y_test, y_pred, normalize='true')
+    tn, fp, fn, tp = cm.ravel()
+
+    # expected loss
+    expected_loss = (fp * fp_prob * fp_loss) + (fn * fn_loss)
+  
+    # update minimum loss and optimal threshold 
+    if expected_loss < min_loss_gm:
+        min_loss_gm = expected_loss
+        optimal_threshold_gm = threshold
+
+print("Optimal Threshold GM:", optimal_threshold_gm)
+print("Minimum Loss GM:", min_loss_gm)
+
+```
+
+```{python}
+y_pred_gm_t = (y_scores_gm >= optimal_threshold_gm).astype(int)
+
+cm_gm_t = confusion_matrix(y_test, y_scores_gm > optimal_threshold_gm, normalize='true')
+tn, fp, fn, tp = cm_gm_t.ravel()
+```
+
+```{python}
+tnr = tn/(tn+fp)
+fpr_gm_t = fp/(fp+tn)
+fnr = fn/(fn+tp)
+tpr_gm_t = tp/(tp+fn)
+
+precision = precision_score(y_test, y_pred_gm_t, average='weighted')
+f1 = f1_score(y_test, y_pred_gm_t, average='weighted')
+fprs_gm_t, tprs_gm_t, thds = roc_curve(y_test, y_scores_gm)
+auc_gm_t = roc_auc_score(y_test, y_scores_gm, multi_class = 'ovr')
+```
+
+```{python}
+min_loss = min_loss_gm
+threshold = optimal_threshold_gm
+```
+
 ```{python}
 sb.glue('D_B_scores',['tnr', 'fpr', 'fnr', 'tpr', 'precision', 'f1', 'auc', 'min_loss', 'threshold'], display=True)
+```
+
+### Kfolds GMM
+
+```{python}
+min_loss_kf = float('inf')  
+optimal_threshold_kf = None
+
+# Kfolds GMM
+for threshold in thresholds:
+    y_pred = (y_scores_kf >= threshold).astype(int)
+
+    # true positives, false positives, true negatives, false negatives
+    cm = confusion_matrix(y_test, y_pred, normalize='true')
+    tn, fp, fn, tp = cm.ravel()
+    
+    # expected loss
+    expected_loss = (fp * fp_prob * fp_loss) + (fn * fn_loss)
+
+    # update minimum loss and optimal threshold 
+    if expected_loss < min_loss_kf:
+        min_loss_kf = expected_loss
+        optimal_threshold_kf = threshold
+
+print("Optimal Threshold Kfolds GM:", optimal_threshold_kf)
+print("Minimum Loss Kfolds GM:", min_loss_kf)
+
+```
+
+```{python}
+y_pred_kf_t = (y_scores_kf >= optimal_threshold_kf).astype(int)
+
+cm_kf_t = confusion_matrix(y_test, y_scores_kf > optimal_threshold_kf, normalize='true')
+tn, fp, fn, tp = cm_kf_t.ravel()
+```
+
+```{python}
+tnr = tn/(tn+fp)
+fpr_kf_t = fp/(fp+tn)
+fnr = fn/(fn+tp)
+tpr_kf_t = tp/(tp+fn)
+
+precision = precision_score(y_test, y_pred_kf_t, average='weighted')
+f1 = f1_score(y_test, y_pred_kf_t, average='weighted')
+fprs_kf_t, tprs_kf_t, thds = roc_curve(y_test, y_scores_kf)
+auc_kf_t = roc_auc_score(y_test, y_scores_kf, multi_class = 'ovr')
+```
+
+```{python}
+min_loss = min_loss_kf
+threshold = optimal_threshold_kf
 ```
 
 ```{python}
@@ -125,15 +611,23 @@ also please save the ROC plot
 
 ```{python}
 fig, ax = plt.subplots()
-#plot ROCs
+ax.set_xlabel('FPR');
+ax.set_ylabel('TPR');
+ax.set_title('ROC with optimized threshold')
 ax.plot([0,1],[0,1]);
+
+ax.plot(fprs_qda_t,tprs_qda_t, color='blue', linewidth=1);
+ax.scatter([fpr_qda_t],[tpr_qda_t],s = 30, edgecolor='blue', zorder=5, facecolor='blue');
+
+ax.plot(fprs_gm_t, tprs_gm_t, color='orange', linewidth=1);
+ax.scatter([fpr_gm_t],[tpr_gm_t],s = 30, edgecolor='orange', zorder=5, facecolor='orange');
+
+ax.plot(fprs_kf_t, tprs_kf_t, color='green', linewidth=1);
+ax.scatter([fpr_kf_t], [tpr_kf_t],s = 30, edgecolor='green', zorder=5, facecolor='green');
+
+ax.text(0.65, 0.5, "AUC QDA = {:4.2f}".format(auc_qda_t), fontsize=12, color='blue');
+ax.text(0.65, 0.45, "AUC GM = {:4.2f}".format(auc_gm_t), fontsize=12, color='orange');
+ax.text(0.65, 0.4, "AUC KFolds = {:4.2f}".format(auc_kf_t), fontsize=12, color='green');
+
 sb.glue('D_ROC',fig, "display", display=False);
-```
-
-```{python}
-
-```
-
-```{python}
-
 ```
