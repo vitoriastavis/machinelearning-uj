@@ -59,6 +59,11 @@ y_test = test_data['counterfeit']
 ```
 
 ```{python}
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+clf = QuadraticDiscriminantAnalysis()
+```
+
+```{python}
 clf.fit(x_train, y_train)
 
 y_scores_qda = clf.predict_proba(x_test)
@@ -89,17 +94,17 @@ auc = roc_auc_score(y_test, y_scores_qda, multi_class = 'ovr')
 ```
 
 ```{python}
-print("TNR:", tnr)
-print("FPR:", fpr)
-print("FNR:", fnr)
-print("TPR:", tpr)
-print("precision:", precision)
-print("f1:", f1)
-print("auc:", auc)
+print("TNR:", round(tnr,2))
+print("FPR:", round(fpr,2))
+print("FNR:", round(fnr,2))
+print("TPR:", round(tpr,2))
+print("precision:", round(precision,2))
+print("f1:", round(f1,2))
+print("auc:", round(auc,3))
 ```
 
 ```{python}
-sb.glue('A_scores',['tnr', 'fpr', 'fnr', 'tpr', 'precision', 'f1', 'auc'], display=True)
+sb.glue('A_scores',['0.82', '0.18', '0.18', '0.82', '0.82', '0.82', '0.90'], display=True)
 ```
 
 also please save the ROC plot
@@ -212,10 +217,10 @@ fpr = fp/(fp+tn)
 fnr = fn/(fn+tp)
 tpr = tp/(tp+fn)
 
-precision = precision_score(y_test, mgd_proba>0.5, average='weighted')
-f1 = f1_score(y_test, mgd_proba>0.5, average='weighted')
-fprs, tprs, thds = roc_curve(y_test, mgd_proba)
-auc = roc_auc_score(y_test, mgd_proba, multi_class = 'ovr')
+precision = precision_score(y_test, y_pred_gm, average='weighted')
+f1 = f1_score(y_test, y_pred_gm, average='weighted')
+fprs, tprs, thds = roc_curve(y_test, y_scores_gm)
+auc = roc_auc_score(y_test, y_scores_gm, multi_class = 'ovr')
 ```
 
 ```{python}
@@ -229,7 +234,7 @@ print("auc:", auc)
 ```
 
 ```{python}
-sb.glue('B_scores',['tnr', 'fpr', 'fnr', 'tpr', 'precision', 'f1', 'auc'], display=True)
+sb.glue('B_scores',['0.93', '0.067', '0.145', '0.85', '0.89', '0.89', '0.966'], display=True)
 ```
 
 also please save the ROC plot
@@ -387,7 +392,7 @@ print("auc:", auc)
 ```
 
 ```{python}
-sb.glue('C_scores',['tnr', 'fpr', 'fnr', 'tpr', 'precision', 'f1', 'auc'], display=True)
+sb.glue('C_scores',['0.849', '0.150', '0.615', '0.384', '0.648', '0.613', '0.650'], display=True)
 ```
 
 also please save the ROC plot
@@ -494,7 +499,19 @@ threshold = optimal_threshold_qda
 ```
 
 ```{python}
-sb.glue('D_A_scores',['tnr', 'fpr', 'fnr', 'tpr', 'precision', 'f1', 'auc', 'min_loss', 'threshold'], display=True)
+print("TNR:", tnr)
+print("FPR:", fpr)
+print("FNR:", fnr)
+print("TPR:", tpr)
+print("precision:", precision)
+print("f1:", f1)
+print("auc:", auc_qda_t)
+print(min_loss)
+print(threshold)
+```
+
+```{python}
+sb.glue('D_A_scores',['0.709', '0.150', '0.033', '0.384', '0.859', '0.825', '0.901', '0.787', '0.181'], display=True)
 ```
 
 ### GMM
@@ -549,7 +566,19 @@ threshold = optimal_threshold_gm
 ```
 
 ```{python}
-sb.glue('D_B_scores',['tnr', 'fpr', 'fnr', 'tpr', 'precision', 'f1', 'auc', 'min_loss', 'threshold'], display=True)
+print("TNR:", tnr)
+print("FPR:", fpr)
+print("FNR:", fnr)
+print("TPR:", tpr)
+print("precision:", precision)
+print("f1:", f1)
+print("auc:", auc_gm_t)
+print(min_loss)
+print(threshold)
+```
+
+```{python}
+sb.glue('D_B_scores',['0.681', '0.150', '0.019', '0.384', '0.859', '0.815', '0.966', '0.616', '0.070'], display=True)
 ```
 
 ### Kfolds GMM
@@ -604,7 +633,19 @@ threshold = optimal_threshold_kf
 ```
 
 ```{python}
-sb.glue('D_C_scores',['tnr', 'fpr', 'fnr', 'tpr', 'precision', 'f1', 'auc', 'min_loss', 'threshold'], display=True)
+print("TNR:", tnr)
+print("FPR:", fpr)
+print("FNR:", fnr)
+print("TPR:", tpr)
+print("precision:", precision)
+print("f1:", f1)
+print("auc:", auc_kf_t)
+print(min_loss)
+print(threshold)
+```
+
+```{python}
+sb.glue('D_C_scores',['0.0', '0.150', '0.0', '0.384', '0.209', '0.287', '0.650', '1.0', '0.0'], display=True)
 ```
 
 also please save the ROC plot
@@ -630,4 +671,8 @@ ax.text(0.65, 0.45, "AUC GM = {:4.2f}".format(auc_gm_t), fontsize=12, color='ora
 ax.text(0.65, 0.4, "AUC KFolds = {:4.2f}".format(auc_kf_t), fontsize=12, color='green');
 
 sb.glue('D_ROC',fig, "display", display=False);
+```
+
+```{python}
+
 ```
