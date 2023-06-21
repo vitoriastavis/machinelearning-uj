@@ -2,13 +2,13 @@ Please do not add the  .ipynb files to repository.
 
 Please update your repo to refelct the last changes in my repository.
 
-# Banknotes NB
+# Banknotes NB 4/4 (5)
 
 31.05.23
 
 OK!! but you  could have just used the GaussianNB from sklearn :)
 
-# Banknotes GMDA 5/15
+# Banknotes GMDA 5/15 (2)
 
 21.06.23
 
@@ -30,13 +30,13 @@ The pobability of genuine banknote is 0.99.
 False negative is a counterfeit banknote classified as genuine. The cost is 100, but the probability of counterfeit banknote is 0.01
 
 
-# Banknotes NN 5/5
+# Banknotes NN 5/5 (5)
 
 21.06.23
 
 Very good ! But BCELoss and CrosseEtropy loss are the same in case of binary classfication. 
 
-# Titanic
+# Titanic 3/5 (3)
 
 31.05.23
 
@@ -48,7 +48,7 @@ Your TPR and FPR calculations are wrong. What you have in the second if clause s
 
 Your TPR and FPR calculations are still wrong. Please calculate correctly the number of positives and negatives. 
 
-## Problem d 3/5
+## Problem d 
 
 Your implementation is wrong. You are implementing an gaussian Naive bayes classifier but should be categorical. Just use the CategoricalNB from sklearn. 
 
